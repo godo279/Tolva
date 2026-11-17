@@ -1,0 +1,3 @@
+App Descargas de tolva (PWA offline)
+Subir todos los archivos de esta carpeta a la raiz de un repositorio de GitHub y activar GitHub Pages.
+Para publicar una version nueva: cambiar "tolva-v1" por "tolva-v2" en sw.js.
