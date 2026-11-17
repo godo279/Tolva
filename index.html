@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Descargas de tolva</title>
+<style>
+:root{--bg:#f4f1ea;--sf:#fff;--tx:#1d2418;--mu:#6b7360;--ac:#2f6b2f;--on:#fff;--bd:#d9d4c5;--wn:#b3261e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a11;--sf:#1e271a;--tx:#eef2e8;--mu:#a1ab94;--ac:#6fbf6f;--on:#10200f;--bd:#33402e;--wn:#ff8a80}}
+:root[data-theme="dark"]{--bg:#141a11;--sf:#1e271a;--tx:#eef2e8;--mu:#a1ab94;--ac:#6fbf6f;--on:#10200f;--bd:#33402e;--wn:#ff8a80}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:18px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 14px}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:14px}
+label{display:block;color:var(--mu);font-size:15px;margin:10px 0 4px}
+input,select{width:100%;font:inherit;padding:14px;border-radius:10px;border:2px solid var(--bd);background:var(--bg);color:var(--tx)}
+input:focus,select:focus{outline:none;border-color:var(--ac)}
+button{font:inherit;font-weight:700;padding:16px;border-radius:12px;border:0;background:var(--ac);color:var(--on);width:100%;margin-top:12px}
+button.s{background:transparent;color:var(--tx);border:2px solid var(--bd)}
+button.sm{width:auto;padding:8px 12px;margin:0;font-size:15px}
+.big{font-size:44px;font-weight:800;line-height:1.1}
+.mu{color:var(--mu);font-size:15px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd)}
+.row:last-child{border:0}
+.hint{color:var(--wn);font-size:15px;min-height:20px;margin-top:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chips span{background:var(--bg);border:1px solid var(--bd);border-radius:20px;padding:4px 10px;font-size:15px}
+</style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f6b2f">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="jspdf.umd.min.js"></script>
+</head><body><main id="app"></main>
+<script>
+var S=null;
+try{S=JSON.parse(localStorage.getItem("tolva2")||"null")}catch(e){}
+S=S||{clients:[],works:[],cw:null,cl:null};
+var view=S.cl?"carga":(S.cw?"lotes":"cliente"),draft={};
+function save(){try{localStorage.setItem("tolva2",JSON.stringify(S))}catch(e){}}
+function $(s){return document.querySelector(s)}
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function fmt(n){return n.toLocaleString("es-AR")}
+function num(v){return parseFloat(String(v||"").replace(",","."))}
+function sum(a){return a.reduce(function(x,y){return x+y},0)}
+function dt(d){return sum(d.cargas)}
+function lt(l){return sum(l.destinos.map(dt))}
+function wt(w){return sum(w.lotes.map(lt))}
+function wha(w){return sum(w.lotes.map(function(l){return l.has}))}
+function avg(t,h){return h>0?fmt(Math.round(t/h)):"-"}
+function wById(id){return S.works.filter(function(x){return x.id===id})[0]}
+function W(){return wById(S.cw)}
+function L(){var w=W();return w&&w.lotes.filter(function(x){return x.id===S.cl})[0]}
+function go(v){view=v;render()}
+function picker(names,lab,nw){
+  return (names.length?'<label>'+lab+'</label><select id="sel" onchange="togg()">'+names.map(function(c){return "<option>"+esc(c)+"</option>"}).join("")+'<option value="__n">+ '+nw+'</option></select>':'')+
+  '<div id="nw" '+(names.length?'style="display:none"':'')+'><label>'+(names.length?nw:lab)+'</label><input id="nuevo" autocomplete="off"></div>';
+}
+function val(){var s=$("#sel");return s&&s.value!=="__n"?s.value:$("#nuevo").value.trim()}
+function togg(){$("#nw").style.display=$("#sel").value==="__n"?"block":"none"}
+
+function render(){
+  var a=$("#app"),w=W(),l=L(),h="";
+  if(view==="cliente"){
+    var hist=S.works.slice().reverse().slice(0,8).map(function(x){
+      return '<div class="row"><div><b>'+esc(x.cliente)+'</b> · '+esc(x.est)+'<div class="mu">'+x.fecha+' · '+fmt(wt(x))+' kg'+(x.done?'':' · en curso')+'</div></div><button class="s sm" onclick="'+(x.done?'pdfId(':'openW(')+x.id+')">'+(x.done?'PDF':'Abrir')+'</button></div>'}).join("");
+    a.innerHTML='<h1>1. Cliente</h1><div class="card">'+picker(S.clients.map(function(c){return c.name}),"Cliente / dueño del cereal","Nuevo cliente")+
+      '<div class="hint" id="h"></div><button onclick="step1()">Siguiente</button></div>'+
+      (hist?'<h1>Trabajos</h1><div class="card">'+hist+'</div>':'');
+  }else if(view==="est"){
+    var c=S.clients.filter(function(x){return x.name===draft.cliente})[0];
+    a.innerHTML='<h1>2. Establecimiento</h1><div class="card"><div class="mu">Cliente: '+esc(draft.cliente)+'</div>'+
+      picker(c?c.ests:[],"Establecimiento","Nuevo establecimiento")+
+      '<div class="hint" id="h"></div><button onclick="step2()">Siguiente</button><button class="s" onclick="go(\'cliente\')">Volver</button></div>';
+  }else if(view==="lotes"){
+    var rows=w.lotes.map(function(x){return '<div class="row"><div><b>'+esc(x.lote)+'</b><div class="mu">'+fmt(x.has)+' ha · '+avg(lt(x),x.has)+' kg/ha</div></div><b>'+fmt(lt(x))+' kg</b></div>'}).join("");
+    a.innerHTML='<div class="mu">'+esc(w.cliente)+'</div><h1>'+esc(w.est)+'</h1><div class="card"><div class="mu">Lotes</div>'+
+      (rows||'<div class="mu">Todavía no hay lotes.</div>')+
+      (w.lotes.length?'<div class="row"><span>Total</span><b>'+fmt(wt(w))+' kg</b></div>':'')+'</div>'+
+      '<button onclick="newLote()">'+(w.lotes.length?"Iniciar otro lote":"Iniciar lote")+'</button>'+
+      (w.lotes.length?'<button class="s" onclick="finishAll()">Finalizar todo el trabajo</button>':'')+
+      '<button class="s" onclick="go(\'cliente\')">Volver al inicio</button>';
+  }else if(view==="lote"){
+    a.innerHTML='<h1>Nuevo lote</h1><div class="card"><div class="mu">'+esc(w.cliente)+' · '+esc(w.est)+'</div>'+
+      '<label>Nombre del lote</label><input id="lote" autocomplete="off"><label>Hectáreas</label><input id="has" inputmode="decimal" placeholder="0">'+
+      '<div class="hint" id="h"></div><button onclick="step3()">Empezar carga</button><button class="s" onclick="go(\'lotes\')">Volver</button></div>';
+  }else if(view==="fin"){
+    var f=draft.fin;
+    a.innerHTML='<h1>Trabajo finalizado</h1><div class="card"><b>'+esc(f.cliente)+' · '+esc(f.est)+'</b><div class="mu">'+f.lotes.length+' lotes · '+fmt(wha(f))+' ha</div><div class="big">'+fmt(wt(f))+' kg</div><div class="mu">Promedio '+avg(wt(f),wha(f))+' kg/ha</div></div>'+
+      '<button onclick="pdfId('+f.id+')">Descargar PDF</button><button class="s" onclick="shareW('+f.id+')">Compartir resumen en texto</button><button class="s" onclick="go(\'cliente\')">Nuevo trabajo</button>';
+  }else{
+    if(!l){go("lotes");return}
+    var act=l.destinos[l.destinos.length-1];
+    var names={};S.works.forEach(function(x){x.lotes.forEach(function(y){y.destinos.forEach(function(d){names[d.name]=1})})});
+    var dl=Object.keys(names).map(function(n){return '<option value="'+esc(n)+'">'}).join("");
+    var closed=l.destinos.slice(0,-1).map(function(d){return '<div class="row"><span>'+esc(d.name)+' <span class="mu">('+d.cargas.length+' cargas)</span></span><b>'+fmt(dt(d))+' kg</b></div>'}).join("");
+    a.innerHTML='<div class="mu">'+esc(w.cliente)+' · '+esc(w.est)+' · '+esc(l.lote)+' · '+fmt(l.has)+' ha</div>'+
+      '<div class="card"><div class="mu">'+(act?'Parcial en curso':'Sin cargas todavía')+'</div><div class="big">'+(act?fmt(dt(act)):'0')+' kg</div>'+
+      (act&&act.cargas.length?'<div class="chips">'+act.cargas.slice(-8).map(function(k){return '<span>'+fmt(k)+'</span>'}).join("")+'</div>':'')+
+      '<label>DESTINO</label><input id="dest" list="dl" autocomplete="off" value="'+esc(act?act.name:"")+'" oninput="hintD()"><datalist id="dl">'+dl+'</datalist>'+
+      '<div class="hint" id="h"></div><label>Kilos</label><input id="kg" inputmode="numeric" placeholder="0">'+
+      '<button onclick="add()">SUMAR</button>'+
+      (act&&act.cargas.length?'<button class="s" onclick="undo()">Deshacer última carga ('+fmt(act.cargas[act.cargas.length-1])+')</button>':'')+'</div>'+
+      (closed?'<div class="card"><div class="mu">Destinos cerrados</div>'+closed+'</div>':'')+
+      '<div class="card"><div class="row"><span>Total del lote</span><b>'+fmt(lt(l))+' kg</b></div><button class="s" onclick="finishLote()">Finalizar lote</button></div>';
+  }
+}
+function step1(){
+  var n=val();if(!n){$("#h").textContent="Ingresá el cliente.";return}
+  if(!S.clients.some(function(c){return c.name===n}))S.clients.push({name:n,ests:[]});
+  save();draft={cliente:n};go("est");
+}
+function step2(){
+  var n=val();if(!n){$("#h").textContent="Ingresá el establecimiento.";return}
+  var c=S.clients.filter(function(x){return x.name===draft.cliente})[0];
+  if(c.ests.indexOf(n)<0)c.ests.push(n);
+  var w={id:Date.now(),cliente:draft.cliente,est:n,fecha:new Date().toLocaleDateString("es-AR"),done:false,lotes:[]};
+  S.works.push(w);S.cw=w.id;S.cl=null;save();go("lotes");
+}
+function openW(id){S.cw=id;var w=wById(id),o=w.lotes.filter(function(x){return !x.done})[0];S.cl=o?o.id:null;save();go(o?"carga":"lotes")}
+function newLote(){go("lote")}
+function step3(){
+  var n=$("#lote").value.trim(),h=num($("#has").value);
+  if(!n||!(h>0)){$("#h").textContent="Completá el lote y las hectáreas.";return}
+  var l={id:Date.now(),lote:n,has:h,done:false,destinos:[]};
+  W().lotes.push(l);S.cl=l.id;save();go("carga");
+}
+function hintD(){
+  var l=L(),act=l.destinos[l.destinos.length-1],v=$("#dest").value.trim().toLowerCase();
+  $("#h").textContent=(act&&v&&v!==act.name.toLowerCase())?"Se cerrará «"+act.name+"» con "+fmt(dt(act))+" kg":"";
+}
+function add(){
+  var l=L(),d=$("#dest").value.trim(),k=num($("#kg").value);
+  if(!d){$("#h").textContent="Escribí el destino.";return}
+  if(!(k>0)){$("#h").textContent="Ingresá los kilos.";return}
+  var act=l.destinos[l.destinos.length-1];
+  if(act&&act.name.toLowerCase()===d.toLowerCase())act.cargas.push(k);
+  else l.destinos.push({name:d,cargas:[k]});
+  save();render();$("#kg").focus();
+}
+function undo(){
+  var l=L(),act=l.destinos[l.destinos.length-1];
+  act.cargas.pop();if(!act.cargas.length)l.destinos.pop();
+  save();render();
+}
+function finishLote(){
+  var w=W(),l=L();
+  if(!confirm("¿Finalizar el lote "+l.lote+"?"))return;
+  if(l.destinos.length)l.done=true;else w.lotes=w.lotes.filter(function(x){return x!==l});
+  S.cl=null;save();go("lotes");
+}
+function finishAll(){
+  var w=W();
+  if(!confirm("¿Finalizar todo el trabajo en "+w.est+"? Se genera el PDF con el resumen."))return;
+  w.lotes.forEach(function(x){x.done=true});w.done=true;
+  S.cw=null;S.cl=null;save();draft={fin:w};go("fin");pdf(w);
+}
+function summary(w){
+  var t=w.cliente+" · "+w.est+" · "+w.fecha+"\n";
+  w.lotes.forEach(function(l){
+    t+="\nLOTE "+l.lote+" ("+fmt(l.has)+" ha): "+fmt(lt(l))+" kg · "+avg(lt(l),l.has)+" kg/ha\n";
+    l.destinos.forEach(function(d){t+="  "+d.name+": "+fmt(dt(d))+" kg ("+d.cargas.map(fmt).join(" + ")+")\n"});
+  });
+  return t+"\nTOTAL: "+fmt(wt(w))+" kg · "+fmt(wha(w))+" ha · "+avg(wt(w),wha(w))+" kg/ha";
+}
+function shareW(id){
+  var t=summary(wById(id));
+  if(navigator.share){navigator.share({text:t}).catch(function(){})}
+  else if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){alert("Resumen copiado")},function(){alert(t)})}
+  else alert(t);
+}
+function makePdf(w){
+  var J=window.jspdf&&window.jspdf.jsPDF;if(!J)return null;
+  var d=new J({unit:"mm",format:"a4"}),y=20,M=15,WD=180;
+  function ln(t,sz,b){
+    d.setFont("helvetica",b?"bold":"normal");d.setFontSize(sz);
+    d.splitTextToSize(t,WD).forEach(function(s){if(y>278){d.addPage();y=20}d.text(s,M,y);y+=sz*0.42+1.6});
+  }
+  ln("Resumen de cosecha",20,1);y+=2;
+  ln("Cliente: "+w.cliente,13);ln("Establecimiento: "+w.est,13);ln("Fecha: "+w.fecha,13);y+=3;
+  ln("Lotes: "+w.lotes.length+"   Hectáreas: "+fmt(wha(w)),13);
+  ln("Kilos totales: "+fmt(wt(w))+" kg",14,1);
+  ln("Promedio general: "+avg(wt(w),wha(w))+" kg/ha",14,1);
+  w.lotes.forEach(function(l){
+    d.addPage();y=20;
+    ln("Lote "+l.lote,18,1);y+=1;
+    ln("Hectáreas: "+fmt(l.has),13);
+    ln("Kilos totales: "+fmt(lt(l))+" kg",14,1);
+    ln("Promedio: "+avg(lt(l),l.has)+" kg/ha",14,1);y+=4;
+    l.destinos.forEach(function(x){
+      ln("Destino: "+x.name,14,1);
+      ln("Kilos totales: "+fmt(dt(x))+" kg · "+x.cargas.length+" cargas",12);
+      ln("Cargas (kg): "+x.cargas.map(function(k,i){return (i+1)+": "+fmt(k)}).join("   "),11);y+=4;
+    });
+  });
+  return d;
+}
+function pdfId(id){pdf(wById(id))}
+function pdf(w){
+  var doc=null;try{doc=makePdf(w)}catch(e){}
+  if(!doc){alert("No se pudo generar el PDF. Podés compartir el resumen en texto.");return}
+  var name=("Cosecha_"+w.cliente+"_"+w.est+"_"+w.fecha).replace(/[^A-Za-z0-9]+/g,"_")+".pdf";
+  try{doc.save(name)}catch(e){alert("No se pudo guardar el PDF.")}
+}
+render();
+if("serviceWorker" in navigator)window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});
+</script></body></html>
